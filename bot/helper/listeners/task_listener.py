@@ -17,6 +17,7 @@ from bot import (
     queued_up,
     queued_dl,
     queue_dict_lock,
+    user_data
 )
 from bot.helper.common import TaskConfig
 from bot.helper.ext_utils.bot_utils import sync_to_async
@@ -35,7 +36,9 @@ from bot.helper.mirror_leech_utils.status_utils.gdrive_status import GdriveStatu
 from bot.helper.mirror_leech_utils.status_utils.queue_status import QueueStatus
 from bot.helper.mirror_leech_utils.status_utils.rclone_status import RcloneStatus
 from bot.helper.mirror_leech_utils.status_utils.switch_status import SwitchStatus
+from bot.helper.mirror_leech_utils.status_utils.ddl_status import DDLStatus
 from bot.helper.mirror_leech_utils.switchUploader import SwUploader
+from bot.helper.mirror_leech_utils.ddlEngine import DDLUploader
 from bot.helper.switch_helper.button_build import ButtonMaker
 from bot.helper.switch_helper.message_utils import (
     sendMessage,
@@ -46,6 +49,10 @@ from bot.helper.switch_helper.message_utils import (
 
 class TaskListener(TaskConfig):
     def __init__(self):
+        #self.message = message
+        #self.uid = self.message.id
+        #self.user_id = self.message.user_id
+        #self.user_dict = user_data.get(self.user_id, {"user_id": self.user_id})
         super().__init__()
 
     async def clean(self):
@@ -203,7 +210,7 @@ class TaskListener(TaskConfig):
             LOGGER.info(f"Leech Name: {self.name}")
             sw = SwUploader(self, up_dir)
             async with task_dict_lock:
-                task_dict[self.mid] = SwitchStatus(self, sw, gid, "up")
+                task_dict[self.mid] = SwitchStatus(self, sw, gid, "up", self.message)
             await gather(
                 update_status_message(self.chat),
                 sw.upload(unwanted_files, files_to_delete),
@@ -212,20 +219,29 @@ class TaskListener(TaskConfig):
             LOGGER.info(f"Gdrive Upload Name: {self.name}")
             drive = gdUpload(self, up_path)
             async with task_dict_lock:
-                task_dict[self.mid] = GdriveStatus(self, drive, gid, "up")
+                task_dict[self.mid] = GdriveStatus(self, drive, gid, "up", self.message)
             await gather(
                 update_status_message(self.chat),
                 sync_to_async(drive.upload, unwanted_files, files_to_delete),
             )
+        elif self.upDest == 'ddl':
+            size = await get_path_size(up_path)
+            LOGGER.info(f"Upload Name: {up_name} via DDL")
+            ddl = DDLUploader(self, up_name, up_dir)
+            ddl_upload_status = DDLStatus(ddl, size, self.message, gid, self.upload_details)
+            async with download_dict_lock:
+                download_dict[self.uid] = ddl_upload_status
+            await update_all_messages()
+            await ddl.upload(up_name, size)
         else:
-            LOGGER.info(f"Rclone Upload Name: {self.name}")
-            RCTransfer = RcloneTransferHelper(self)
-            async with task_dict_lock:
-                task_dict[self.mid] = RcloneStatus(self, RCTransfer, gid, "up")
-            await gather(
-                update_status_message(self.chat),
-                RCTransfer.upload(up_path, unwanted_files, files_to_delete),
-            )
+            size = await get_path_size(up_path)
+            LOGGER.info(f"Upload Name: {up_name}")
+            RCTransfer = RcloneTransferHelper(self, up_name)
+            async with download_dict_lock:
+                download_dict[self.uid] = RcloneStatus(
+                    RCTransfer, self.message, gid, 'up')
+            await update_all_messages()
+            await RCTransfer.upload(up_path, size)
 
     async def onUploadComplete(
         self, link, files, folders, mime_type, rclonePath="", dir_id=""
