@@ -1,5 +1,6 @@
 aiofiles
 aioshutil
+aiohttp
 anytree
 apscheduler
 aria2p
