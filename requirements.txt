@@ -27,8 +27,8 @@ python-dotenv
 python-magic
 qbittorrent-api
 requests
-swibots
 setuptools>=65.5.1
+swibots
 telegraph
 tenacity
 tgcrypto
