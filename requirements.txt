@@ -28,6 +28,7 @@ python-magic
 qbittorrent-api
 requests
 swibots
+setuptools>=65.5.1
 telegraph
 tenacity
 tgcrypto
